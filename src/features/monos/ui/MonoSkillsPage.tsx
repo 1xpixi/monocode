@@ -34,7 +34,7 @@ export function MonoSkillsPage({
   cwd: string;
   projects: readonly string[];
   files: MonoFiles | undefined;
-  onBack: () => void;
+  onBack?: () => void;
 }) {
   const [view, setView] = useState<View>({ kind: "list" });
   const [error, setError] = useState<string>();

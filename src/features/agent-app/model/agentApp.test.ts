@@ -142,7 +142,7 @@ describe("agent app commands", () => {
         }, host);
         const launch = vi.mocked(host.start).mock.calls.at(-1)![0];
         expect(launch.sidebarHidden).toBe(
-          showStartedSessionsInSidebar === false ? true : undefined,
+          showStartedSessionsInSidebar === true ? undefined : true,
         );
       }
     },
@@ -172,6 +172,7 @@ describe("agent app commands", () => {
     host.monoOf = () => ({
       id: "mono",
       projects: [source.cwd],
+      showStartedSessionsInSidebar: true,
       folder: { name: "Captain Jack", color: "#5b8def" },
     });
     for (const request of ["first", "second"])
