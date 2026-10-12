@@ -149,10 +149,11 @@ pub(crate) fn list(dir: &Path) -> Result<Vec<MonoSkill>, String> {
             available: true,
         });
     }
+    // A corrupt or unreadable assignments file must not block soul, memory, or
+    // owned skills. Save still rejects invalid JSON through validate_assignments.
     let assigned = match std::fs::read_to_string(dir.join("skills.json")) {
-        Ok(text) => assignments(&text)?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-        Err(e) => return Err(e.to_string()),
+        Ok(text) => assignments(&text).unwrap_or_default(),
+        Err(_) => Vec::new(),
     };
     for item in assigned {
         if !names.insert(item.name.clone()) {
@@ -308,6 +309,30 @@ mod tests {
             read_skill(&dir, "shared").unwrap().path,
             crate::fs::path_to_js(&allowed_path)
         );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn invalid_skills_json_does_not_block_listing_owned_skills() {
+        let dir = std::env::temp_dir().join(format!("mono-skills-{}", uuid::Uuid::new_v4()));
+        let path = owned_path(&dir, "review-pr").unwrap();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            "---\nname: review-pr\ndescription: Review PRs\n---\n\nCheck the diff.\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("skills.json"), "{not-json").unwrap();
+        let listed = list(&dir).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].owned);
+        assert_eq!(listed[0].name, "review-pr");
+        std::fs::write(
+            dir.join("skills.json"),
+            r#"[{"name":"dup","description":"a","path":"/a/SKILL.md"},{"name":"dup","description":"b","path":"/b/SKILL.md"}]"#,
+        )
+        .unwrap();
+        assert_eq!(list(&dir).unwrap().len(), 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

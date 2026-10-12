@@ -634,4 +634,20 @@ mod tests {
         assert_eq!(listed.skills[0].hash, "");
         std::fs::remove_dir_all(root).unwrap();
     }
+
+    #[test]
+    fn load_survives_invalid_skills_json() {
+        let root = temp_root();
+        let text = "---\nname: review-pr\ndescription: Review PRs\n---\n\nCheck the diff.\n";
+        save(&root, "a", None, "skills/review-pr/SKILL.md", text, None).unwrap();
+        let dir = agent_dir(&root, "a", None).unwrap();
+        std::fs::write(dir.join("skills.json"), "{not-json").unwrap();
+        let loaded = load(&root, "a", None).unwrap();
+        assert_eq!(loaded.skills.len(), 1);
+        assert!(loaded.skills[0].owned);
+        assert_eq!(loaded.soul, None);
+        assert_eq!(loaded.memory, "");
+        assert!(save(&root, "a", None, "skills.json", "{not-json", None).is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
