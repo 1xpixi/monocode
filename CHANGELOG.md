@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remote hosts can run on **Linux without systemd**, such as containers and Firecracker microVMs. Setup starts the host as a detached background process there instead of a systemd user service, so it keeps running after SSH disconnects, and the next connect starts it again if it has stopped. Machines with systemd keep the user service and lingering.
 
+### Fixed
+
+- Change markers on the diff editor's scrollbar line up with their changes when long lines wrap. Markers follow the rendered line heights, including removed lines, so the scrollbar thumb covers a marker while its change is on screen, and clicking a marker scrolls to its change.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
