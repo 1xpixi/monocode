@@ -6993,6 +6993,15 @@ function Workspace({
       const stageCommand = operatorCommand.matched
         ? { text: promptText, matched: false }
         : consumeStageCommand(submittedText);
+      // Plan mode forbids edits and orchestration replaces the request.
+      if (stageCommand.matched && intent !== "default") {
+        enqueueHarnessEvent(sessionId, {
+          type: "status",
+          text: "Use /stage from a regular session turn, outside Plan or Orchestrator mode.",
+        });
+        flushHarnessEvents();
+        return false;
+      }
       const rawCommand =
         !operatorCommand.matched &&
         !stageCommand.matched &&
