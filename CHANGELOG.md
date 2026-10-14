@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remote hosts can run on **Linux without systemd**, such as containers and Firecracker microVMs. Setup starts the host as a detached background process there instead of a systemd user service, so it keeps running after SSH disconnects, and the next connect starts it again if it has stopped. Machines with systemd keep the user service and lingering.
 
+### Fixed
+
+- Selecting the **whole last paragraph** of a reply, such as by triple-clicking it, shows the Add to chat and Add to notes menu instead of nothing. Such a selection ends at the start of the action row below the reply, which no longer counts as leaving the reply when it picks up none of the row's text.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
