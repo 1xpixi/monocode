@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remote hosts can run on **Linux without systemd**, such as containers and Firecracker microVMs. Setup starts the host as a detached background process there instead of a systemd user service, so it keeps running after SSH disconnects, and the next connect starts it again if it has stopped. Machines with systemd keep the user service and lingering.
 
+### Changed
+
+- Provider processes on **macOS hosts** run without the CPU and I/O throttling launchd applies to background services, so the builds, tests, and Git commands agents start there run as they would from Terminal. This takes effect on new installs, or after `service uninstall` and reconnecting.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
