@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { closeSync, existsSync, openSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, openSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
@@ -142,8 +142,19 @@ export function startDetached(options: ServiceOptions, path: string): void {
         env: { ...process.env, PATH: path },
       },
     );
-    // A spawn failure surfaces below as a host that never answers.
-    child.on("error", () => undefined);
+    // A spawn failure surfaces below as a host that never answers; record why
+    // in host.log, which the startup error points to.
+    child.on("error", (error) => {
+      try {
+        appendFileSync(
+          join(options.directory, "host.log"),
+          `Failed to start host: ${error.message}\n`,
+          { mode: 0o600 },
+        );
+      } catch {
+        /* the startup error still names host.log */
+      }
+    });
     child.unref();
   } finally {
     closeSync(log);

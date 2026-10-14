@@ -155,6 +155,34 @@ console.log("started");
   },
 );
 
+it.skipIf(process.platform === "win32")(
+  "records why the host could not be started",
+  async () => {
+    const directory = mkdtempSync(join(tmpdir(), "monocode-detached-test-"));
+    try {
+      startDetached(
+        {
+          directory,
+          port: 4321,
+          executable: join(directory, "missing-node"),
+          entry: join(directory, "entry.mjs"),
+        },
+        "/usr/bin",
+      );
+      const log = join(directory, "host.log");
+      for (let i = 0; i < 100; i++) {
+        if (readFileSync(log, "utf8").includes("Failed to start host")) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(readFileSync(log, "utf8")).toMatch(
+        /Failed to start host: .*ENOENT/,
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
+
 it("unregisters only this user's Windows task", async () => {
   const scripts: string[] = [];
   await uninstallService({
