@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remote hosts can run on **Linux without systemd**, such as containers and Firecracker microVMs. Setup starts the host as a detached background process there instead of a systemd user service, so it keeps running after SSH disconnects, and the next connect starts it again if it has stopped. Machines with systemd keep the user service and lingering.
 
+### Fixed
+
+- Git LFS repositories no longer fail with "git-lfs: command not found" when MonoCode is opened from Finder. Status, diffs, staging, discards, and worktree checks run Git with Homebrew and other common install directories on its PATH, plus the terminal's PATH once it has been read, so filters resolve without waiting on the login shell.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
