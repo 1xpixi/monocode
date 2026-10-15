@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Remote hosts can run on **Linux without systemd**, such as containers and Firecracker microVMs. Setup starts the host as a detached background process there instead of a systemd user service, so it keeps running after SSH disconnects, and the next connect starts it again if it has stopped. Machines with systemd keep the user service and lingering.
 
+### Fixed
+
+- Right-clicking an empty part of a MonoCode window no longer opens a native menu offering only **Reload**, which read like an action on the clicked item. Reload stays in the View menu (**⌘⇧R / Ctrl+Shift+R**), and text fields, editors, terminals, selected text, links, and media keep their native menus.
+
 ## [0.13.0] - 2026-10-12
 
 ### Added
