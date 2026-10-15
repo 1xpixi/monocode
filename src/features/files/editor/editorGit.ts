@@ -919,7 +919,15 @@ const gitOverview = ViewPlugin.fromClass(
     onMouseDown(event: MouseEvent) {
       if (event.button !== 0) return;
       event.preventDefault();
-      this.jump(event);
+      // Ticks are drawn at least 3px tall, taller than a small change spans
+      // on the rail, so a click on one goes to its change rather than to the
+      // line under the pointer. Dragging on from there follows the pointer.
+      const tick =
+        event.target instanceof HTMLElement
+          ? event.target.closest<HTMLElement>(".cm-gitOverviewTick")
+          : null;
+      if (tick?.dataset.pos != null) this.scrollTo(Number(tick.dataset.pos));
+      else this.jump(event);
       const move = (next: MouseEvent) => this.jump(next);
       const stop = () => {
         window.removeEventListener("mousemove", move);
@@ -941,8 +949,12 @@ const gitOverview = ViewPlugin.fromClass(
       const block = this.view.lineBlockAtHeight(
         ratio * height - documentOffset(this.view),
       );
+      this.scrollTo(block.from);
+    }
+
+    scrollTo(pos: number) {
       this.view.dispatch({
-        effects: EditorView.scrollIntoView(block.from, { y: "center" }),
+        effects: EditorView.scrollIntoView(pos, { y: "center" }),
       });
     }
 
@@ -974,6 +986,7 @@ const gitOverview = ViewPlugin.fromClass(
         el.className = `cm-gitOverviewTick cm-gitOverview-${tick.kind}`;
         el.style.top = `${tick.top * 100}%`;
         el.style.height = `${Math.max(3, tick.size * height)}px`;
+        el.dataset.pos = String(tick.pos);
         this.dom.appendChild(el);
       }
     }
