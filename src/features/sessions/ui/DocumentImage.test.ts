@@ -84,6 +84,26 @@ describe("DocumentImage", () => {
     root = createRoot(container);
   });
 
+  it("frees the blob URL and shows alt text when the image fails to decode", async () => {
+    readProjectImage.mockResolvedValue(PNG);
+    await show("broken.png");
+
+    const image = container.querySelector("img")!;
+    act(() => {
+      image.dispatchEvent(new Event("error"));
+    });
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("[data-image-alt]")?.textContent).toBe(
+      "Hero",
+    );
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:test/1");
+
+    act(() => root.unmount());
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+    root = createRoot(container);
+  });
+
   it("shows an SVG as an image", async () => {
     readProjectImage.mockResolvedValue(
       text('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script></svg>'),

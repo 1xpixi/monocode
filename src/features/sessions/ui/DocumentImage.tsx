@@ -35,6 +35,12 @@ export function ImageAltText({ alt, title }: { alt?: string; title?: string }) {
   );
 }
 
+function releaseBlob(ref: { current: string | null }) {
+  if (!ref.current) return;
+  URL.revokeObjectURL(ref.current);
+  ref.current = null;
+}
+
 /**
  * An image a Markdown document shows from its own project, at its natural or
  * declared size like on GitHub. The file loads once it scrolls near view and
@@ -60,6 +66,9 @@ export function DocumentImage({
   const [near, setNear] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  // The blob URL this image holds, revoked once, whichever comes first: an
+  // image that fails to decode, a new path, or unmount.
+  const blobRef = useRef<string | null>(null);
 
   useEffect(() => {
     const box = boxRef.current;
@@ -81,7 +90,6 @@ export function DocumentImage({
   useEffect(() => {
     if (!near) return;
     let cancelled = false;
-    let created: string | null = null;
     setUrl(null);
     setFailed(false);
     readProjectImage(root, relative).then(
@@ -92,7 +100,10 @@ export function DocumentImage({
           setFailed(true);
           return;
         }
-        created = URL.createObjectURL(new Blob([bytes], { type: mime }));
+        const created = URL.createObjectURL(
+          new Blob([bytes], { type: mime }),
+        );
+        blobRef.current = created;
         setUrl(created);
       },
       () => {
@@ -101,7 +112,7 @@ export function DocumentImage({
     );
     return () => {
       cancelled = true;
-      if (created) URL.revokeObjectURL(created);
+      releaseBlob(blobRef);
     };
   }, [near, root, relative]);
 
@@ -142,7 +153,11 @@ export function DocumentImage({
       data-document-image={path}
       draggable={false}
       style={style}
-      onError={() => setFailed(true)}
+      onError={() => {
+        releaseBlob(blobRef);
+        setUrl(null);
+        setFailed(true);
+      }}
     />
   );
 }
