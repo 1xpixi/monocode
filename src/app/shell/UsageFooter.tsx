@@ -267,23 +267,26 @@ export function UsageChips({
     wantDevin,
   ]);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback((includeCodex = true) => {
     if (inflight.current) return inflight.current;
-    setRefreshing(true);
+    // Background reads must not suppress a manual refresh of Codex.
+    if (includeCodex) setRefreshing(true);
     const jobs: Promise<unknown>[] = [];
     if (wantClaude && claudeAccountAvailable)
       jobs.push(loadRateLimits("claude", claudeAccountId, true));
-    if (wantCodex && codexAccountAvailable)
+    if (includeCodex && wantCodex && codexAccountAvailable)
       jobs.push(loadRateLimits("codex", codexAccountId, true));
     if (wantOpencode) jobs.push(loadRateLimits("opencode", "default", true));
     if (wantDevin) jobs.push(loadRateLimits("devin", "default", true));
     const run = Promise.allSettled(jobs)
       .then(() => undefined)
       .finally(() => {
-        inflight.current = null;
-        setRefreshing(false);
+        if (includeCodex) {
+          inflight.current = null;
+          setRefreshing(false);
+        }
       });
-    inflight.current = run;
+    if (includeCodex) inflight.current = run;
     return run;
   }, [
     claudeAccountAvailable,
@@ -297,7 +300,7 @@ export function UsageChips({
   ]);
 
   const isAnyActiveSnapshotStale = useCallback(
-    (maxAgeMs: number) => {
+    (maxAgeMs: number, includeCodex = true) => {
       const timestamp = Date.now();
       const isStale = (c: ProviderRateLimits) =>
         (c.status === "ok" || c.status === "error") && timestamp - c.updatedAt >= maxAgeMs;
@@ -305,7 +308,7 @@ export function UsageChips({
       if (wantClaude && claudeAccountAvailable) {
         if (isStale(getCachedRateLimits("claude", claudeAccountId))) return true;
       }
-      if (wantCodex && codexAccountAvailable) {
+      if (includeCodex && wantCodex && codexAccountAvailable) {
         if (isStale(getCachedRateLimits("codex", codexAccountId))) return true;
       }
       if (wantOpencode) {
@@ -351,9 +354,10 @@ export function UsageChips({
       setNow(Date.now());
       if (
         document.visibilityState === "visible" &&
-        isAnyActiveSnapshotStale(RATE_LIMIT_POLL_MS)
+        isAnyActiveSnapshotStale(RATE_LIMIT_POLL_MS, false)
       ) {
-        void refresh();
+        // Codex pushes quota changes through its existing app-server connection.
+        void refresh(false);
       }
     }, CLOCK_MS);
     return () => window.clearInterval(timer);

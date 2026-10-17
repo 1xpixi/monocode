@@ -34,8 +34,8 @@ export type SessionConfigOption = {
 
 // ACP tool updates are patches: results may precede a final status-only update
 // and streamed content chunks append rather than replace. Retain only bounded
-// output and kind by provider-session/call ID, clearing settled entries.
-const toolOutputs = new Map<string, { kind?: string; output?: string }>();
+// output, kind and title by provider-session/call ID, clearing settled entries.
+const toolOutputs = new Map<string, { kind?: string; output?: string; title?: string }>();
 const MAX_TRACKED_TOOL_OUTPUTS = 256;
 
 export function antigravityPromptBlocks(
@@ -200,15 +200,6 @@ export function eventsFromAcpUpdate(params: unknown): HarnessEvent[] {
       ? cap(`${previous.output}\n${result}`)
       : result ?? (status === "completed" || status === "failed" || status === "cancelled"
         ? previous?.output : undefined);
-    if (status === "completed" || status === "failed" || status === "cancelled") {
-      toolOutputs.delete(stateKey);
-    } else if (toolKind || detail) {
-      toolOutputs.delete(stateKey);
-      toolOutputs.set(stateKey, { kind: toolKind, output: detail ?? previous?.output });
-      if (toolOutputs.size > MAX_TRACKED_TOOL_OUTPUTS) {
-        toolOutputs.delete(toolOutputs.keys().next().value!);
-      }
-    }
     // The transcript marks successful output explicitly. Keep it in the
     // preview as well as detail: ACP often sends content while in_progress,
     // then a status-only completed update. That last update must not make the
@@ -225,7 +216,7 @@ export function eventsFromAcpUpdate(params: unknown): HarnessEvent[] {
     const title =
       composeToolTitle({
         kind: toolKind,
-        title: toolLabel(update) ?? toolLabel(tool),
+        title: toolLabel(update) ?? toolLabel(tool) ?? previous?.title,
         command: extractShellCommand(
           update.rawInput,
           tool.rawInput,
@@ -259,6 +250,15 @@ export function eventsFromAcpUpdate(params: unknown): HarnessEvent[] {
       }) ||
       toolLabel(update) ||
       toolLabel(tool);
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      toolOutputs.delete(stateKey);
+    } else if (toolKind || detail || title) {
+      toolOutputs.delete(stateKey);
+      toolOutputs.set(stateKey, { kind: toolKind, output: detail ?? previous?.output, title });
+      if (toolOutputs.size > MAX_TRACKED_TOOL_OUTPUTS) {
+        toolOutputs.delete(toolOutputs.keys().next().value!);
+      }
+    }
     return [
       {
         type: "tool.updated",

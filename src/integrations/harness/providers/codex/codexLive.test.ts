@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sent: string[] = [];
+const updateCodexRateLimits = vi.hoisted(() => vi.fn());
+vi.mock("../../../../features/providers/model/rateLimitsCache", () => ({
+  updateCodexRateLimits,
+}));
 let onLine: ((line: string) => void) | undefined;
 const writeChild = vi.fn(async (_id: string, line: string) => {
   sent.push(line);
@@ -177,6 +181,7 @@ async function startTurn(
 
 describe("codex live turn sequence", () => {
   beforeEach(() => {
+    updateCodexRateLimits.mockClear();
     sent.length = 0;
     onLine = undefined;
     writeChild.mockClear();
@@ -200,6 +205,21 @@ describe("codex live turn sequence", () => {
 
     await waitFor(() => onAccepted.mock.calls.length === 1, "turn acceptance");
     expect(onAccepted).toHaveBeenCalledOnce();
+    notify("turn/completed", { turn: { id: "turn_1", status: "completed" } });
+    await turn;
+  });
+
+  it.each([undefined, "work-account"])("publishes pushed quotas during a running turn for account %s without a probe", async (providerAccountId) => {
+    const { turn } = await startTurn("codex-live", { providerAccountId });
+    let completed = false;
+    void turn.then(() => { completed = true; });
+    const methods = parse().map((message) => message.method);
+    const rateLimits = { limitId: "codex", primary: { usedPercent: 31, windowDurationMins: 300, resetsAt: 1_800_000_000 } };
+    notify("account/rateLimits/updated", { rateLimits });
+    await waitFor(() => updateCodexRateLimits.mock.calls.length === 1, "quota push");
+    expect(updateCodexRateLimits).toHaveBeenCalledWith(rateLimits, providerAccountId);
+    expect(completed).toBe(false);
+    expect(parse().map((message) => message.method)).toEqual(methods);
     notify("turn/completed", { turn: { id: "turn_1", status: "completed" } });
     await turn;
   });

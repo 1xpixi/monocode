@@ -200,8 +200,9 @@ describe.each(providers)("$id ACP protocol", ({ id, protocol, mode, blocks, mode
       const notification = (update: Record<string, unknown>) => protocol.eventsFromAcpUpdate({
         sessionId: "patch-test-session", update: { toolCallId: callId, ...update },
       })[0];
-      expect(notification({ sessionUpdate: "tool_call", kind, title: kind === "read" ? "Read a.ts" : "Running 5 commands",
-        rawInput: { command: "do something" } })).toMatchObject({ type: "tool.updated", callId });
+      const started = notification({ sessionUpdate: "tool_call", kind, title: kind === "read" ? "Read a.ts" : "Running 5 commands",
+        rawInput: { command: "do something" } });
+      expect(started).toMatchObject({ type: "tool.updated", callId });
       const partial = notification({ sessionUpdate: "tool_call_update", status: "in_progress",
         rawOutput: { stdout: "real result", exitCode: 0 } });
       const output = kind === "execute"
@@ -213,6 +214,7 @@ describe.each(providers)("$id ACP protocol", ({ id, protocol, mode, blocks, mode
       } });
       const complete = notification({ sessionUpdate: "tool_call_update", status: "completed" });
       expect(complete).toMatchObject({ type: "tool.updated", status: "completed",
+        title: started.type === "tool.updated" ? started.title : undefined,
         detail: output,
         preview: { kind: kind === "execute" ? "shell" : "read" } });
     }

@@ -3,6 +3,7 @@ import {
   errorRateLimits,
   fetchingRateLimits,
   idleRateLimits,
+  parseCodexRateLimits,
   type ProviderRateLimits,
   type RateLimitProvider,
 } from "./rateLimits";
@@ -12,6 +13,7 @@ import {
   fetchDevinRateLimits,
   fetchOpencodeGoRateLimits,
 } from "./rateLimitsFetch";
+import { providerAccountExists } from "./providerAccounts";
 
 const snapshots = new Map<string, ProviderRateLimits>();
 const pending = new Map<string, Promise<ProviderRateLimits>>();
@@ -70,7 +72,27 @@ export function setCachedRateLimits(
   publish(keyFor(provider, accountId), value);
 }
 
-/** Fetch an account once per window lifetime, or again on explicit refresh. */
+/** App-server pushes account quota changes during a turn; no usage probe is needed. */
+export function updateCodexRateLimits(
+  update: Record<string, unknown>,
+  accountId = "default",
+): void {
+  // Model-specific buckets must not replace the account's main Codex meter.
+  if (update.limitId && update.limitId !== "codex") return;
+  if (!providerAccountExists("codex", accountId)) return;
+  const parsed = parseCodexRateLimits(update);
+  if (!parsed.session && !parsed.weekly && !parsed.monthly) return;
+  const cached = getCachedRateLimits("codex", accountId);
+  publish(keyFor("codex", accountId), {
+    ...parsed,
+    session: parsed.session ?? cached.session,
+    weekly: parsed.weekly ?? cached.weekly,
+    monthly: parsed.monthly ?? cached.monthly,
+    resetCredits: cached.resetCredits,
+  });
+}
+
+/** Reuse the cached account snapshot unless the caller requests a fresh read. */
 export function loadRateLimits(
   provider: RateLimitProvider,
   accountId = "default",
@@ -85,7 +107,11 @@ export function loadRateLimits(
     if (!force) return running;
     const queued = queuedRefreshes.get(key);
     if (queued) return queued;
-    const next = running.then(() => loadRateLimits(provider, accountId, true));
+    const next = running.then(() => {
+      // Once this refresh starts, a newer completion must be able to queue another.
+      if (queuedRefreshes.get(key) === next) queuedRefreshes.delete(key);
+      return loadRateLimits(provider, accountId, true);
+    });
     queuedRefreshes.set(key, next);
     void next.finally(() => {
       if (queuedRefreshes.get(key) === next) queuedRefreshes.delete(key);
@@ -95,7 +121,8 @@ export function loadRateLimits(
   const cached = snapshots.get(key);
   if (cached && !force) return Promise.resolve(cached);
 
-  publish(key, fetchingRateLimits(provider, cached));
+  const fetching = fetchingRateLimits(provider, cached);
+  publish(key, fetching);
   const run = (async () => {
     try {
       const result =
@@ -106,9 +133,13 @@ export function loadRateLimits(
             : provider === "devin"
               ? await fetchDevinRateLimits()
               : await fetchOpencodeGoRateLimits();
+      // A pushed snapshot or account removal supersedes this older probe.
+      if (snapshots.get(key) !== fetching) return snapshots.get(key) ?? result;
       publish(key, result);
       return result;
     } catch (error) {
+      if (snapshots.get(key) !== fetching)
+        return snapshots.get(key) ?? idle[provider];
       const result = errorRateLimits(
         provider,
         error instanceof Error ? error.message : String(error),

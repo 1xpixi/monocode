@@ -22,7 +22,10 @@ import {
   scheduleRateLimitsAutoRefresh,
   cancelRateLimitsAutoRefresh,
   AUTO_REFRESH_DEBOUNCE_MS,
+  setCachedRateLimits,
+  updateCodexRateLimits,
 } from "./rateLimitsCache";
+import { saveProviderAccount, removeProviderAccount } from "./providerAccounts";
 
 function sampleLimits(
   usedPercent: number,
@@ -45,6 +48,44 @@ describe("rateLimitsCache auto-refresh debouncing", () => {
     vi.useFakeTimers();
     clearCachedRateLimits();
     fetches.claude.mockReset();
+    fetches.codex.mockReset();
+    localStorage.clear();
+  });
+
+  it("merges sparse Codex pushes into the originating account without fetching or losing other windows/credits", () => {
+    const account = { id: "work-account", provider: "codex" as const, label: "Work" };
+    saveProviderAccount(account);
+    const cached = { ...sampleLimits(10), provider: "codex" as const,
+      weekly: { usedPercent: 25, windowMinutes: 10080, resetsAt: 1_800_000_000_000 },
+      resetCredits: { availableCount: 1, credits: null },
+    };
+    setCachedRateLimits("codex", account.id, cached);
+    const update = { limitId: "codex", primary: { usedPercent: 40, windowDurationMins: 300, resetsAt: 1_800_000_000 } };
+    updateCodexRateLimits(update, account.id);
+    expect(getCachedRateLimits("codex", account.id)).toMatchObject({
+      status: "ok", session: { usedPercent: 40 }, weekly: cached.weekly, resetCredits: cached.resetCredits,
+    });
+    expect(getCachedRateLimits("codex").status).toBe("idle");
+    updateCodexRateLimits({ ...update, limitId: "codex_other" }, account.id);
+    updateCodexRateLimits({ limitId: "codex" }, account.id);
+    expect(getCachedRateLimits("codex", account.id).session?.usedPercent).toBe(40);
+    removeProviderAccount("codex", account.id);
+    clearCachedRateLimits("codex", account.id);
+    updateCodexRateLimits(update, account.id);
+    expect(getCachedRateLimits("codex", account.id).status).toBe("idle");
+    expect(fetches.codex).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("keeps a newer Codex push when an older probe settles (error=%s)", async (fails) => {
+    let resolve!: (limits: ProviderRateLimits) => void;
+    let reject!: (error: Error) => void;
+    fetches.codex.mockImplementationOnce(() => new Promise((yes, no) => { resolve = yes; reject = no; }));
+    const request = loadRateLimits("codex", "default", true);
+    updateCodexRateLimits({ primary: { usedPercent: 45, windowDurationMins: 300 } });
+    if (fails) reject(new Error("Old request failed"));
+    else resolve({ ...sampleLimits(5), provider: "codex" });
+    expect((await request).session?.usedPercent).toBe(45);
+    expect(getCachedRateLimits("codex")).toMatchObject({ status: "ok", session: { usedPercent: 45 } });
   });
 
   afterEach(() => {
@@ -95,6 +136,31 @@ describe("rateLimitsCache auto-refresh debouncing", () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(fetches.claude).not.toHaveBeenCalled();
+  });
+
+  it("queues a fresh request for a turn completed after a queued refresh has started", async () => {
+    let resolveFirst!: (limits: ProviderRateLimits) => void;
+    let resolveSecond!: (limits: ProviderRateLimits) => void;
+    fetches.claude
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }))
+      .mockResolvedValue(sampleLimits(80));
+    const first = loadRateLimits("claude", "default", true);
+    const second = loadRateLimits("claude", "default", true);
+    expect(loadRateLimits("claude", "default", true)).toBe(second);
+    resolveFirst(sampleLimits(20));
+    await first;
+    expect(fetches.claude).toHaveBeenCalledTimes(2);
+
+    scheduleRateLimitsAutoRefresh("claude", "default", 500);
+    await vi.advanceTimersByTimeAsync(500);
+    const third = loadRateLimits("claude", "default", true);
+    expect(third).not.toBe(second);
+    expect(loadRateLimits("claude", "default", true)).toBe(third);
+    resolveSecond(sampleLimits(40));
+    await Promise.all([second, third]);
+    expect(fetches.claude).toHaveBeenCalledTimes(3);
+    expect(getCachedRateLimits("claude").session?.usedPercent).toBe(80);
   });
 
   it("cancels a scheduled auto-refresh when an intervening forced load starts", async () => {

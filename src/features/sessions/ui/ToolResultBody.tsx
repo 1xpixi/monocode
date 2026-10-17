@@ -120,47 +120,6 @@ function cappedCommandResults(output: string): CommandResult[] | undefined {
   }
 }
 
-/** The reducer caps large results with a newline and ellipsis. Those partial
- * JSON values cannot be parsed, but their completed fields can still be read
- * with indentation. Do not reinterpret arbitrary console output as JSON. */
-function indentedTruncatedJson(output: string): string | undefined {
-  const source = output.trimEnd();
-  if (!/^[\[{]/.test(source) || !source.endsWith("\n…")) return;
-  let depth = 0;
-  let quoted = false;
-  let escaped = false;
-  let result = "";
-  const indentation = () => "  ".repeat(Math.min(depth, 16));
-  for (const char of source) {
-    if (quoted) {
-      result += char;
-      if (escaped) escaped = false;
-      else if (char === "\\") escaped = true;
-      else if (char === '"') quoted = false;
-      continue;
-    }
-    if (char === '"') {
-      quoted = true;
-      result += char;
-    } else if (char === "{" || char === "[") {
-      depth++;
-      result += char + "\n" + indentation();
-    } else if (char === "}" || char === "]") {
-      depth = Math.max(0, depth - 1);
-      result = result.trimEnd() + "\n" + indentation() + char;
-    } else if (char === ",") {
-      result += ",\n" + indentation();
-    } else if (char === ":") {
-      result += ": ";
-    } else if (char === "…") {
-      result = result.trimEnd() + "\n" + indentation() + char;
-    } else if (!/\s/.test(char)) {
-      result += char;
-    }
-  }
-  return result;
-}
-
 /** Mounted only while open: parsing and highlighting never run on collapsed calls. */
 export function ToolResultBody({
   output,
@@ -222,10 +181,9 @@ export function ToolResultBody({
         commands: kind ? undefined : commandResults(json),
       };
     } catch {
-      const partial = indentedTruncatedJson(output);
       const commands = kind ? undefined : cappedCommandResults(output);
-      return partial
-        ? { text: partial, incomplete: true, commands }
+      return commands
+        ? { text: output, incomplete: true, commands }
         : undefined;
     }
   }, [output, kind]);

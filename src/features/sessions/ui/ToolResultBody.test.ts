@@ -56,16 +56,14 @@ it("indents complete JSON only while the disclosure is mounted", () => {
   ).toBe("false");
 });
 
-it("indents capped JSON without breaking quoted punctuation", () => {
-  const capped =
-    '{"results":[{"command":"echo a,b:c","stdout":"ok"},{"command":"echo second","stdout":"done"}],"more":{"pending":\n…';
-  act(() => root.render(createElement(ToolResultBody, { output: capped })));
-  const pre = container.querySelector("pre")!;
-  expect(pre.textContent).toContain('\n  "results": [');
-  expect(pre.textContent).toContain('"echo a,b:c"');
-  expect(pre.textContent).toContain('\n    "pending":');
-  expect(pre.textContent?.trimEnd().endsWith("…")).toBe(true);
-  expect(pre.getAttribute("data-incomplete-json")).toBe("true");
+it.each([
+  '[INFO] build step started\n[WARN] waiting for dependency\n…',
+  '{ordinary console output}\n  preserve indentation\n…',
+  '{"results":[{"name":"unfinished"}],"more":{"pending":\n…',
+])("preserves malformed or truncated text verbatim: %s", (output) => {
+  act(() => root.render(createElement(ToolResultBody, { output })));
+  expect(container.querySelector("[data-tool-result-text]")?.textContent).toBe(output);
+  expect(container.querySelector("[data-incomplete-json]")).toBeNull();
 });
 
 it("preserves stdout and other invalid JSON as escaped, scrollable text", () => {

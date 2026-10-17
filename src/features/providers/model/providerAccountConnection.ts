@@ -13,6 +13,14 @@ export function providerAccountConnection(
   if (installed === null) return "checking";
   if (!installed) return "not-installed";
   if (
+    limits?.status === "unavailable" &&
+    /not (?:signed in|authenticated|logged in)|authentication required/i.test(
+      limits.error ?? "",
+    )
+  ) {
+    return "not-signed-in";
+  }
+  if (
     limits?.status === "ok" ||
     [
       identity?.email,
@@ -22,14 +30,6 @@ export function providerAccountConnection(
     ].some((value) => typeof value === "string" && value.trim().length > 0)
   ) {
     return "connected";
-  }
-  if (
-    limits?.status === "unavailable" &&
-    /not (?:signed in|authenticated|logged in)|authentication required/i.test(
-      limits.error ?? "",
-    )
-  ) {
-    return "not-signed-in";
   }
   if (
     identity === undefined ||

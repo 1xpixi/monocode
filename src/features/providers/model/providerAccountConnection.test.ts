@@ -7,6 +7,21 @@ import {
 import { providerAccountConnection } from "./providerAccountConnection";
 
 describe("providerAccountConnection", () => {
+  it.each(["Claude not signed in", "Codex not authenticated", "Authentication required"])(
+    "gives an explicit sign-out precedence over a cached identity: %s",
+    (message) => {
+      expect(providerAccountConnection(
+        true,
+        { email: "cached@example.com", name: "Cached", plan: "Pro" },
+        unavailableRateLimits("codex", message),
+      )).toBe("not-signed-in");
+      expect(providerAccountConnection(
+        true,
+        { email: "cached@example.com" },
+        errorRateLimits("codex", "Network unavailable"),
+      )).toBe("connected");
+    },
+  );
   it("keeps an automatic default CLI profile disconnected until the CLI exists", () => {
     expect(providerAccountConnection(null, undefined, undefined)).toBe(
       "checking",

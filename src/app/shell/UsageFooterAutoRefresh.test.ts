@@ -11,6 +11,7 @@ import {
   setCachedRateLimits,
   getCachedRateLimits,
   scheduleRateLimitsAutoRefresh,
+  updateCodexRateLimits,
 } from "../../features/providers/model/rateLimitsCache";
 import {
   DEFAULT_PROVIDER_ACCOUNT_ID,
@@ -67,6 +68,7 @@ beforeEach(() => {
   });
   setCachedRateLimits("claude", DEFAULT_PROVIDER_ACCOUNT_ID, sampleLimits(10));
   fetches.claude.mockReset();
+  fetches.codex.mockReset();
 });
 
 afterEach(async () => {
@@ -284,6 +286,32 @@ describe("UsageFooter automatic rate-limit refresh", () => {
 
     expect(fetches.claude).toHaveBeenCalledTimes(1);
     expect(container.textContent).toContain("70%");
+  });
+
+  it("renders Codex pushes without interval probes, even when another provider polls", async () => {
+    setCachedRateLimits("codex", "default", { ...sampleLimits(10), provider: "codex" });
+    let finishBackground!: (limits: ProviderRateLimits) => void;
+    fetches.claude
+      .mockImplementationOnce(() => new Promise((resolve) => { finishBackground = resolve; }))
+      .mockResolvedValue(sampleLimits(60));
+    fetches.codex.mockResolvedValue({ ...sampleLimits(75), provider: "codex" });
+    await act(async () => {
+      root.render(createElement(UsageFooter, { providers: ["claude", "codex"] }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RATE_LIMIT_POLL_MS + 30_000);
+    });
+    expect(fetches.claude).toHaveBeenCalled();
+    expect(fetches.codex).not.toHaveBeenCalled();
+    await act(async () => {
+      updateCodexRateLimits({ primary: { usedPercent: 45, windowDurationMins: 300 } });
+    });
+    expect(container.textContent).toContain("45%");
+    expect(fetches.codex).not.toHaveBeenCalled();
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Refresh usage"]')!.click());
+    expect(fetches.codex).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("75%");
+    await act(async () => { finishBackground(sampleLimits(60)); });
   });
 
   it("retries an aged error snapshot on focus or return", async () => {
