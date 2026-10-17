@@ -4,6 +4,7 @@ import {
   fetchingRateLimits,
   idleRateLimits,
   parseCodexRateLimits,
+  type RateLimitWindow,
   type ProviderRateLimits,
   type RateLimitProvider,
 } from "./rateLimits";
@@ -85,11 +86,21 @@ export function updateCodexRateLimits(
   const cached = getCachedRateLimits("codex", accountId);
   publish(keyFor("codex", accountId), {
     ...parsed,
-    session: parsed.session ?? cached.session,
-    weekly: parsed.weekly ?? cached.weekly,
-    monthly: parsed.monthly ?? cached.monthly,
+    session: mergeCodexWindow(parsed.session, cached.session),
+    weekly: mergeCodexWindow(parsed.weekly, cached.weekly),
+    monthly: mergeCodexWindow(parsed.monthly, cached.monthly),
     resetCredits: cached.resetCredits,
   });
+}
+
+/** Sparse quota pushes may update usage without supplying a new reset time. */
+function mergeCodexWindow(
+  window: RateLimitWindow | null,
+  cached: RateLimitWindow | null,
+): RateLimitWindow | null {
+  return window
+    ? { ...window, resetsAt: window.resetsAt ?? cached?.resetsAt ?? null }
+    : cached;
 }
 
 /** Reuse the cached account snapshot unless the caller requests a fresh read. */

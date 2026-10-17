@@ -88,6 +88,29 @@ describe("rateLimitsCache auto-refresh debouncing", () => {
     expect(getCachedRateLimits("codex")).toMatchObject({ status: "ok", session: { usedPercent: 45 } });
   });
 
+  it.each([
+    ["session", "primary", 300],
+    ["weekly", "secondary", 10080],
+    ["monthly", "primary", 43200],
+  ] as const)("preserves an omitted %s reset time but accepts a new one", (window, slot, windowMinutes) => {
+    const resetsAt = 1_800_000_000_000;
+    setCachedRateLimits("codex", "default", {
+      ...sampleLimits(10),
+      provider: "codex",
+      [window]: { usedPercent: 10, windowMinutes, resetsAt },
+    });
+
+    updateCodexRateLimits({ [slot]: { usedPercent: 45, windowDurationMins: windowMinutes } });
+    expect(getCachedRateLimits("codex")[window]).toMatchObject({ usedPercent: 45, resetsAt });
+
+    updateCodexRateLimits({ [slot]: {
+      usedPercent: 50, windowDurationMins: windowMinutes, resetsAt: 1_800_100_000,
+    } });
+    expect(getCachedRateLimits("codex")[window]).toMatchObject({
+      usedPercent: 50, resetsAt: 1_800_100_000_000,
+    });
+  });
+
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
