@@ -12,6 +12,7 @@ import { newTerminalFile } from "../../src/features/workspace/model/layout";
 import { seedProjectBranches } from "../../src/features/source-control/hooks/useProjectBranches";
 import { setHarnessModels } from "../../src/features/sessions/model/models";
 import "../../src/styles/index.css";
+import { applyBodyGlass, applySidebarOpacity } from "../../src/features/settings/model/appearance";
 
 // All native operations, including PTYs and file access, stay in this fixture.
 mockWindows("main");
@@ -64,6 +65,11 @@ if (params.has("long"))
   ]);
 document.documentElement.classList.toggle("theme-light", params.has("light"));
 const wallpaper = params.has("wallpaper");
+if (params.has("glass")) {
+  document.documentElement.classList.add("has-native-glass");
+  applyBodyGlass(true);
+  applySidebarOpacity(Number(params.get("opacity") ?? "0.9"));
+}
 const tab = (id: string): Tab => ({
   id,
   project: "Fixture",
@@ -140,11 +146,11 @@ function Fixture() {
       />
       <div style={{ display: "flex", minWidth: 0 }}>
         {sidebar && (
-          <aside style={{ width: 180, flexShrink: 0, padding: 12 }}>
+          <aside className={params.has("glass") ? "sidebar-glass" : undefined} style={{ width: 180, flexShrink: 0, padding: 12 }}>
             Sessions
           </aside>
         )}
-        <main style={{ minWidth: 0, flex: 1, paddingTop: 120 }}>
+        <main className={params.has("glass") ? "body-glass" : undefined} style={{ minWidth: 0, flex: 1, paddingTop: 120 }}>
           <Composer
             focused={created > 0}
             focusToken={created}

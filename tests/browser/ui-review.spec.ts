@@ -462,3 +462,48 @@ for (const light of [false, true]) {
     });
   }
 }
+
+for (const width of [320, 1120]) {
+  test(`composer remains slightly darker as main glass opacity changes at ${width}px`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`/tests/browser/ui-review.html?glass&wallpaper${width === 320 ? "&closed" : ""}`);
+    await expect(field(page)).toBeVisible();
+    const samples: number[] = [];
+    for (const opacity of [0.9, 0.5]) {
+      await page.evaluate(async (opacity) => {
+        const modulePath = "/src/features/settings/model/appearance.ts";
+        const appearance = await import(modulePath);
+        appearance.applySidebarOpacity(opacity);
+      }, opacity);
+      const colors = await page.evaluate(async () => {
+        // Composite the actual pane/composer paints over a sample desktop.
+        await document.fonts.ready;
+        const pane = getComputedStyle(document.querySelector("main")!);
+        const surface = getComputedStyle(document.querySelector("[data-composer-box]")!);
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#808080"; ctx.fillRect(0, 0, 1, 1);
+        ctx.fillStyle = pane.backgroundColor; ctx.fillRect(0, 0, 1, 1);
+        const paneColor = ctx.getImageData(0, 0, 1, 1).data[0];
+        ctx.fillStyle = surface.backgroundColor; ctx.fillRect(0, 0, 1, 1);
+        const tint = surface.backgroundImage.match(/color\(srgb [^)]+\)/)?.[0];
+        if (tint) { ctx.fillStyle = tint; ctx.fillRect(0, 0, 1, 1); }
+        return { pane: paneColor, composer: ctx.getImageData(0, 0, 1, 1).data[0] };
+      });
+      expect(colors.composer).toBeLessThan(colors.pane);
+      expect(colors.composer).toBeGreaterThanOrEqual(colors.pane * 0.75);
+      samples.push(colors.composer);
+    }
+    expect(samples[1]).toBeGreaterThan(samples[0]);
+
+    await page.evaluate(() => document.documentElement.classList.remove("glass-body"));
+    const solid = await page.locator("[data-composer-box]").evaluate((el) => getComputedStyle(el).backgroundColor);
+    await page.evaluate(() => {
+      document.documentElement.classList.add("glass-body");
+      document.documentElement.classList.remove("has-native-glass");
+    });
+    await expect(page.locator("[data-composer-box]")).toHaveCSS("background-color", solid);
+  });
+}

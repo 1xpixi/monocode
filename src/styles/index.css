@@ -1684,6 +1684,13 @@ html .session-composer [data-composer-box] {
     color-mix(in srgb, var(--color-background-base) 90%, transparent);
 }
 
+/* The pane already supplies the user's glass opacity. A small darkening layer
+   follows that surface instead of making the composer almost opaque again. */
+html.has-native-glass.glass-body:not(.theme-light)
+  .session-composer [data-composer-box] {
+  background: color-mix(in srgb, var(--color-background-base) 20%, transparent);
+}
+
 .session-composer .composer-field::placeholder {
   color: color-mix(
     in srgb,
