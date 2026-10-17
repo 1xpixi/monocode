@@ -1203,6 +1203,7 @@ function sameAgentStep(a: AgentStep, b: AgentStep): boolean {
     a.toolKind === b.toolKind &&
     a.status === b.status &&
     a.detail === b.detail &&
+    a.detailIsOutput === b.detailIsOutput &&
     samePreview(a.preview, b.preview)
   );
 }

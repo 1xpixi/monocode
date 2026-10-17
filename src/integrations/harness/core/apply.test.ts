@@ -626,6 +626,35 @@ describe("successful tool result provenance", () => {
     expect(steps?.[0]).toMatchObject({ detail: "tests passed", detailIsOutput: true });
     expect(steps?.[1].preview?.output).toBe("lint passed");
   });
+
+  it("updates nested output provenance when completed detail text is unchanged", () => {
+    let session = applyHarnessEvent(newSession("claude", "/repo"), {
+      type: "tool.started", callId: "parent", title: "Review", kind: "agent",
+    });
+    session = applyHarnessEvent(session, {
+      type: "agent.step", callId: "parent", stepId: "child", kind: "tool",
+      text: "Read config", status: "in_progress", detail: "same detail",
+    });
+    session = applyHarnessEvent(session, {
+      type: "agent.step", callId: "parent", stepId: "child", kind: "tool",
+      text: "Read config", status: "completed",
+    });
+    expect(session.blocks[0].agentRun?.steps[0]).toMatchObject({
+      detail: "same detail", status: "completed",
+    });
+    expect(session.blocks[0].agentRun?.steps[0].detailIsOutput).not.toBe(true);
+
+    const before = session;
+    session = applyHarnessEvent(session, {
+      type: "agent.step", callId: "parent", stepId: "child", kind: "tool",
+      text: "Read config", status: "completed", detail: "same detail",
+    });
+    expect(session).not.toBe(before);
+    expect(session.blocks[0].agentRun?.steps[0]).toMatchObject({
+      detail: "same detail", status: "completed", detailIsOutput: true,
+    });
+    expect(sanitizeSessionForPersist(session).blocks[0].agentRun?.steps[0].detailIsOutput).toBe(true);
+  });
 });
 
 describe("usage limits", () => {

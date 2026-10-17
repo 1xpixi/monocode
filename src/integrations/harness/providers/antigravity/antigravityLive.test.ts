@@ -357,6 +357,17 @@ describe.each(providers)("$id offline ACP transport", (provider) => {
     expect(mock.kill).toHaveBeenCalledWith(genKey);
   });
 
+  it("redacts JSON-formatted credentials in authentication errors", async () => {
+    mock.initAuthMethods = [{ id: "oauth-personal", name: "Google" }];
+    mock.authRequired = true;
+    mock.fail.add("authenticate");
+    mock.authFailureDetail = 'Provider rejected credentials: {"access_token":"secret-json-access","refresh_token":"secret-json-refresh","client_secret":"secret-json-client","code":"secret-json-code"}';
+    const failure = await provider.send(input).then(() => null, (error: Error) => error);
+    expect(failure?.message).toContain("Provider rejected credentials");
+    expect(failure?.message).toContain("[hidden]");
+    expect(failure?.message).not.toMatch(/secret-json-(access|refresh|client|code)/);
+  });
+
   it("probes catalogs over ACP once, kills the probe, and preserves models on failure", async () => {
     const first = provider.refresh();
     expect(provider.refresh()).toBe(first);

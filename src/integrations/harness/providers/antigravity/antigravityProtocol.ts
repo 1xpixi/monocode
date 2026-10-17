@@ -198,7 +198,8 @@ export function eventsFromAcpUpdate(params: unknown): HarnessEvent[] {
     const result = toolDetail(update, tool, toolKind);
     const detail = result && kind === "tool_call_content_chunk" && previous?.output
       ? cap(`${previous.output}\n${result}`)
-      : result ?? (status === "completed" || status === "failed" ? previous?.output : undefined);
+      : result ?? (status === "completed" || status === "failed" || status === "cancelled"
+        ? previous?.output : undefined);
     if (status === "completed" || status === "failed" || status === "cancelled") {
       toolOutputs.delete(stateKey);
     } else if (toolKind || detail) {

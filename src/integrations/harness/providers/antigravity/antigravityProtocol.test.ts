@@ -218,6 +218,33 @@ describe.each(providers)("$id ACP protocol", ({ id, protocol, mode, blocks, mode
     }
   });
 
+  it("retains previously reported output on a status-only cancellation before discarding cache", () => {
+    const notification = (update: Record<string, unknown>) => protocol.eventsFromAcpUpdate({
+      sessionId: "cancelled-output-regression", update: {
+        sessionUpdate: "tool_call_update", toolCallId: "cancelled-shell", ...update,
+      },
+    })[0];
+    notification({ kind: "execute", status: "in_progress",
+      rawInput: { command: "INPUT_SENTINEL_NOT_A_RESULT" },
+      rawOutput: { commandLine: "npm test", exitCode: 1,
+        combinedOutput: "2 tests failed\n" },
+    });
+    const expectedOutput = JSON.stringify({ commandLine: "npm test", exitCode: 1,
+      combinedOutput: "2 tests failed\n" });
+    expect(notification({ status: "cancelled" })).toMatchObject({
+      type: "tool.updated", callId: "cancelled-shell", kind: "execute",
+      status: "cancelled", detail: expectedOutput,
+      preview: { kind: "shell", output: expectedOutput },
+    });
+    // A settled cancellation must release its cached output, not replay it on
+    // later updates reusing the same ID or promote the original request input.
+    const recycled = notification({ status: "cancelled",
+      rawInput: { command: "INPUT_SENTINEL_NOT_A_RESULT" } });
+    if (recycled.type !== "tool.updated") throw new Error("Expected tool update");
+    expect(recycled.detail).toBeUndefined();
+    expect(recycled.preview?.output).toBeUndefined();
+  });
+
   it("appends ACP tool_call_content_chunk output without joining it to input", () => {
     const notification = (update: Record<string, unknown>) => protocol.eventsFromAcpUpdate({
       sessionId: "chunk-test-session", update: { toolCallId: "read-stream", ...update },

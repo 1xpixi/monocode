@@ -127,7 +127,11 @@ function safeErrorDetail(error: unknown): string {
   // Keep useful account/eligibility messages but never expose those values.
   return detail
     .replace(/https?:\/\/[^\s<>"']+/gi, "[sign-in link hidden]")
-    .replace(/\b(access_token|refresh_token|id_token|client_secret|api_key|token|code|state)\s*[=:]\s*[^\s,;&"']+/gi, "$1=[hidden]")
+    // ACP failures may embed a JSON error body: quoted keys and values must
+    // be redacted just like the key=value diagnostics from the CLI.
+    .replace(/(["'])(access_token|refresh_token|id_token|client_secret|api_key|token|code|state)\1(\s*[=:]\s*)(["'])(?:\\.|(?!\4)[^\\])*\4/gi, "$1$2$1$3$4[hidden]$4")
+    .replace(/\b(access_token|refresh_token|id_token|client_secret|api_key|token|code|state)\b(\s*[=:]\s*)(["'])(?:\\.|(?!\3)[^\\])*\3/gi, "$1$2$3[hidden]$3")
+    .replace(/\b(access_token|refresh_token|id_token|client_secret|api_key|token|code|state)\b\s*[=:]\s*[^\s,;&"']+/gi, "$1=[hidden]")
     .replace(/\bBearer\s+\S+/gi, "Bearer [hidden]");
 }
 
