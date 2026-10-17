@@ -257,3 +257,35 @@ it("never treats a search/read JSON result with stdout fields as a shell executi
   expect(region.textContent).not.toContain("Exit 7");
   expect(region.textContent).not.toContain("View raw JSON");
 });
+
+it.each([false, true])("hands edge scrolling to the nearest parent (activity=%s)", (inActivity) => {
+  const transcript = document.createElement("div");
+  transcript.className = "agent-transcript";
+  const activity = document.createElement("div");
+  activity.className = "zen-phase-live";
+  document.body.append(transcript);
+  if (inActivity) transcript.append(activity);
+  (inActivity ? activity : transcript).append(container);
+  for (const el of [transcript, activity]) {
+    Object.defineProperties(el, {
+      scrollHeight: { value: 500 },
+      clientHeight: { value: 100 },
+    });
+    el.scrollTop = 100;
+  }
+  try {
+    act(() => root.render(createElement(ToolResultBody, { output: "Short output" })));
+    const region = container.querySelector<HTMLElement>("[data-tool-result]")!;
+    const wheel = new WheelEvent("wheel", { deltaY: -30, bubbles: true, cancelable: true });
+    region.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(transcript.scrollTop).toBe(inActivity ? 100 : 70);
+    expect(activity.scrollTop).toBe(inActivity ? 70 : 100);
+    region.dispatchEvent(new WheelEvent("wheel", { deltaY: 30, bubbles: true, cancelable: true }));
+    expect(transcript.scrollTop).toBe(100);
+    expect(activity.scrollTop).toBe(100);
+  } finally {
+    document.body.append(container);
+    transcript.remove();
+  }
+});

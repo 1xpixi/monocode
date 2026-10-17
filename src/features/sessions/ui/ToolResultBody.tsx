@@ -178,9 +178,8 @@ export function ToolResultBody({
   useEffect(() => {
     const region = regionRef.current;
     if (!region) return;
-    // Empty or edge-clamped result panels shouldn't eat the transcript wheel.
-    // Explicitly hand it off: nested code scrollbars and long output panels
-    // still keep the gesture as long as they have room in that direction.
+    // At a result's edge, hand the wheel to its activity list first. A result
+    // outside a live activity list falls back to the conversation scroller.
     const onWheel = (event: WheelEvent) => {
       if (
         event.ctrlKey ||
@@ -202,11 +201,12 @@ export function ToolResultBody({
         (deltaY > 0 && region.scrollTop < max - 1)
       )
         return;
-      const transcript = region.closest<HTMLElement>(".agent-transcript");
-      if (!transcript || transcript.scrollHeight <= transcript.clientHeight)
-        return;
+      const parent = region.closest<HTMLElement>(
+        ".zen-phase-live, .agent-transcript",
+      );
+      if (!parent || parent.scrollHeight <= parent.clientHeight) return;
       event.preventDefault();
-      transcript.scrollTop += deltaY;
+      parent.scrollTop += deltaY;
     };
     region.addEventListener("wheel", onWheel, { passive: false });
     return () => region.removeEventListener("wheel", onWheel);

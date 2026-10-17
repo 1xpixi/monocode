@@ -219,15 +219,17 @@ test("shell results show readable output and wheel gestures scroll the right con
   );
   await result.getByRole("button", { name: "Hide raw JSON" }).click();
 
-  // This short result cannot scroll by itself. The mouse wheel should move the
-  // transcript behind it rather than getting trapped inside an empty scroller.
-  const geometry = await transcript.evaluate((el) => ({
+  // A short result hands the wheel to its surrounding activity list before
+  // the conversation. The transcript must stay put while reading that list.
+  const activity = page.locator(".zen-phase-live");
+  const geometry = await activity.evaluate((el) => ({
     height: el.clientHeight,
     scroll: el.scrollHeight,
   }));
-  expect(geometry.scroll).toBeGreaterThan(geometry.height + 100);
+  expect(geometry.scroll).toBeGreaterThan(geometry.height);
   await result.scrollIntoViewIfNeeded();
-  const before = await transcript.evaluate((el) => ({
+  const chatTop = await transcript.evaluate((el) => el.scrollTop);
+  const before = await activity.evaluate((el) => ({
     top: el.scrollTop,
     max: el.scrollHeight - el.clientHeight,
   }));
@@ -241,21 +243,23 @@ test("shell results show readable output and wheel gestures scroll the right con
   await page.mouse.wheel(0, delta);
   if (delta > 0)
     await expect
-      .poll(() => transcript.evaluate((el) => el.scrollTop))
+      .poll(() => activity.evaluate((el) => el.scrollTop))
       .toBeGreaterThan(before.top);
   else
     await expect
-      .poll(() => transcript.evaluate((el) => el.scrollTop))
+      .poll(() => activity.evaluate((el) => el.scrollTop))
       .toBeLessThan(before.top);
   await expect.poll(() => result.evaluate((el) => el.scrollTop)).toBe(0);
-  const afterUp = await transcript.evaluate((el) => el.scrollTop);
+  expect(await transcript.evaluate((el) => el.scrollTop)).toBe(chatTop);
+  const afterUp = await activity.evaluate((el) => el.scrollTop);
   const shortBox = await result.boundingBox();
   expect(shortBox).not.toBeNull();
   await page.mouse.move(shortBox!.x + shortBox!.width / 2, shortBox!.y + 12);
   await page.mouse.wheel(0, 50);
   await expect
-    .poll(() => transcript.evaluate((el) => el.scrollTop))
+    .poll(() => activity.evaluate((el) => el.scrollTop))
     .toBeGreaterThan(afterUp);
+  expect(await transcript.evaluate((el) => el.scrollTop)).toBe(chatTop);
 
   // A genuinely long result has its own scroll range and takes the wheel until
   // it reaches the edge, without prematurely scrolling the conversation.
@@ -270,14 +274,42 @@ test("shell results show readable output and wheel gestures scroll the right con
     el.scrollTop = 0;
   });
   const beforeParent = await transcript.evaluate((el) => el.scrollTop);
-  const largeBox = await large.boundingBox();
-  expect(largeBox).not.toBeNull();
-  await page.mouse.move(largeBox!.x + largeBox!.width / 2, largeBox!.y + 24);
+  const hoverLarge = async () => {
+    const point = await large.evaluate((el) => {
+      const result = el.getBoundingClientRect();
+      const activity = el.closest(".zen-phase-live")!.getBoundingClientRect();
+      const chat = el.closest(".agent-transcript")!.getBoundingClientRect();
+      const top = Math.max(result.top, activity.top, chat.top, 0);
+      const bottom = Math.min(result.bottom, activity.bottom, chat.bottom, innerHeight);
+      return { x: result.x + result.width / 2, y: (top + bottom) / 2, height: bottom - top };
+    });
+    expect(point.height).toBeGreaterThan(0);
+    await page.mouse.move(point.x, point.y);
+  };
+  await hoverLarge();
   await page.mouse.wheel(0, 100);
   await expect
     .poll(() => large.evaluate((el) => el.scrollTop))
     .toBeGreaterThan(0);
   expect(await transcript.evaluate((el) => el.scrollTop)).toBe(beforeParent);
+
+  // Both output edges hand scrolling to the enclosing activity window.
+  for (const direction of [-1, 1]) {
+    await large.evaluate((el, direction) => {
+      el.scrollTop = direction < 0 ? 0 : el.scrollHeight;
+      const activity = el.closest(".zen-phase-live")!;
+      activity.scrollTop = (activity.scrollHeight - activity.clientHeight) / 2;
+    }, direction);
+    await hoverLarge();
+    const workTop = await activity.evaluate((el) => el.scrollTop);
+    const outputTop = await large.evaluate((el) => el.scrollTop);
+    const chatTop = await transcript.evaluate((el) => el.scrollTop);
+    await page.mouse.wheel(0, direction * 40);
+    await expect.poll(async () => (await activity.evaluate((el) => el.scrollTop)) - workTop)
+      [direction < 0 ? "toBeLessThan" : "toBeGreaterThan"](0);
+    expect(await large.evaluate((el) => el.scrollTop)).toBe(outputTop);
+    expect(await transcript.evaluate((el) => el.scrollTop)).toBe(chatTop);
+  }
 });
 
 test("previously capped shell JSON stays readable without breaking the transcript layout", async ({
