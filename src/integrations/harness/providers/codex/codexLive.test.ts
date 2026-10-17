@@ -66,7 +66,7 @@ import {
   type RuntimeMode,
   type TurnIntent,
 } from "../../../../features/sessions/model/session";
-import { applyHarnessEvent } from "../../core/apply";
+import { appendSteerUser, appendUser, applyHarnessEvent } from "../../core/apply";
 
 function parse() {
   return sent.map((line) => JSON.parse(line) as Record<string, unknown>);
@@ -730,6 +730,26 @@ describe("codex live turn sequence", () => {
         .filter((event) => event.type === "reasoning.delta")
         .map((event) => event.text),
     ).toEqual(["First thought.", "Next thought."]);
+  });
+
+  it("reconciles a reused item snapshot across a steer without replaying earlier text", async () => {
+    const { events, turn } = await startTurn("codex-live");
+    let session = appendUser(newSession("codex", "/repo"), "Plan it");
+    notify("item/agentMessage/delta", { itemId: "same-item", delta: "1. integration" });
+    for (const event of events.splice(0)) session = applyHarnessEvent(session, event);
+    session = appendSteerUser(session, "Continue");
+    notify("item/agentMessage/delta", { itemId: "same-item", delta: "Got it." });
+    notify("item/completed", { item: { id: "same-item", type: "agentMessage", text: "1. integrationGot it." } });
+    notify("turn/completed", { turn: { id: "turn_1", status: "completed" } });
+    await turn;
+    for (const event of events) session = applyHarnessEvent(session, event);
+    expect(session.blocks.filter((block) => block.role === "user" || block.role === "assistant")
+      .map(({ role, text }) => ({ role, text }))).toEqual([
+        { role: "user", text: "Plan it" },
+        { role: "assistant", text: "1. integration" },
+        { role: "user", text: "Continue" },
+        { role: "assistant", text: "Got it." },
+      ]);
   });
 
   it("resets text tracking between turns when an item id is reused", async () => {
